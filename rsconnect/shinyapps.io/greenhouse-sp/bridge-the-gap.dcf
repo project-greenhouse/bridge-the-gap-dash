@@ -1,0 +1,13 @@
+name: bridge-the-gap
+title: bridge-the-gap
+username: greenhouse-sp
+account: greenhouse-sp
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 13658782
+bundleId: 9603953
+url: https://greenhouse-sp.shinyapps.io/bridge-the-gap/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: .Rprofile|app.log|backup_data.RData|backup_env_vars.RData|btg-banner-white-trans.png|btg-logo-black-trans.png|btg-logo-white-trans.png|btg-wallpaper-white-trans.png|data_sheets_controller.R|Next steps.R|renv.lock|restofserver.R|service_account_base64.txt|styles.css

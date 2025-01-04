@@ -1,0 +1,63 @@
+/* General Theme Colors */
+body {
+    background-color: black !important;
+    color: white !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: black !important;
+}
+
+/* Header Styling */
+.main-header {
+    background-color: black !important;
+    color: white !important;
+}
+
+.main-header .logo {
+    background-color: black !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+/* Sidebar Styling */
+.main-sidebar {
+    background-color: black !important;
+    color: white !important;
+}
+
+.sidebar-menu > li > a {
+    color: #b8b8b8 !important; /* Non-selected tabs */
+}
+
+.sidebar-menu > li.active > a {
+    background-color: #00c0ef !important; /* Selected tab color */
+    color: white !important;
+}
+
+/* Login Page Styling */
+#login-panel {
+    background-color: black !important;
+    color: white !important;
+    text-align: center;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+#login-panel img {
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 20px;
+}
+
+/* Button Styling */
+#login_btn {
+    background-color: black !important;
+    color: white !important;
+    border-color: #6397d0 !important;
+}
+
+#login_btn:hover {
+    background-color: #6397d0 !important;
+    border-color: #6397d0 !important;
+}
