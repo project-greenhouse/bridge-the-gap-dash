@@ -14,8 +14,25 @@ header <- dashboardHeader(
     title = "Bridge The Gap",
     href = "https://www.btgphysicaltherapy.com/",
     image = "btg-logo-black-trans-950.png"
-    ),
+  ),
   titleWidth = "250px"
+)
+
+#------------------------------------------------------------#
+##----- Footer -----
+#------------------------------------------------------------#
+footer <- dashboardFooter(
+  tags$div(
+    style = "display: flex; justify-content: center; align-items: center; height: 100%;",
+    tags$p(
+      "BTG Combine Testing App v1.0.0 | Powered by ",
+      tags$a(
+        href = "https://www.greenhouse-ps.com/",
+        "Greenhouse Performance Solutions LLC"
+      ),
+      "."
+    )
+  )
 )
 
 #------------------------------------------------------------#
@@ -27,13 +44,14 @@ sidebar <- dashboardSidebar(
 )
 
 #------------------------------------------------------------#
-#----- Body -----
+##----- Body -----
 #------------------------------------------------------------#
 ui <- dashboardPage(
   dark = NULL,
   help = NULL,
   header = header,
   sidebar = sidebar,
+  footer = footer,
   
   dashboardBody(
     useWaiter(),  # Initialize waiter
@@ -64,9 +82,9 @@ ui <- dashboardPage(
     tabItems(
       tabItem(tabName = "home", uiOutput("homePageUI")),
       #tabItem(tabName = "admin", uiOutput("adminScreen")),
-      tabItem(tabName = "roster", uiOutput("rosterScreen")),
-      tabItem(tabName = "tests", uiOutput("testScreen")),
-      tabItem(tabName = "reports", uiOutput("reportScreen"))
+      #tabItem(tabName = "roster", uiOutput("rosterScreen")),
+      #tabItem(tabName = "reports", uiOutput("reportScreen")),
+      tabItem(tabName = "tests", uiOutput("testScreen"))
     )
   )
 )
@@ -76,7 +94,6 @@ ui <- dashboardPage(
 #------------------------------------------------------------#
 
 server <- function(input, output, session) {
-  
   
   #------------------------------------------------------------#
   ##-----| Auth Reactive Values -----
@@ -90,6 +107,29 @@ server <- function(input, output, session) {
     uuid = NULL,
     name = NULL
   )
+  
+  #------------------------------------------------------------#
+  ##-----| Org Reactive Data -----
+  #------------------------------------------------------------#
+  rosterDF <- reactiveVal()
+  teamsDF <- reactiveVal()
+  classList <- reactiveVal()
+  posList <- reactiveVal()
+  sportList <- reactiveVal()
+  
+  #------------------------------------------------------------#
+  ##-----| Testing Reactive Data -----
+  #------------------------------------------------------------#
+  cmjData <- reactiveVal()
+  sjData <- reactiveVal()
+  mrData <- reactiveVal()
+  laneAgilityData <- reactiveVal()
+  fiveTenFiveData <- reactiveVal()
+  threeQuarterData <- reactiveVal()
+  anthroData <- reactiveVal()
+  broadData <- reactiveVal()
+  fortyData <- reactiveVal()
+  vertData <- reactiveVal()
   
   # Initialize values at session start
   session$onSessionEnded(function() {
@@ -118,9 +158,13 @@ server <- function(input, output, session) {
           # Sidebar Menu Items
           tags$div(
             style = "flex-grow: 1;",
-            menuItem("Home", tabName = "home", icon = icon("home"), selected = TRUE),  # Default tab for logged-in users
-            menuItem("Roster", tabName = "roster", icon = icon("users")),
+            menuItem("Home", tabName = "home", icon = icon("home"), selected = TRUE),
+            #menuItem("Roster", tabName = "roster", icon = icon("users")),
             menuItem("Tests", tabName = "tests", icon = icon("stopwatch")),
+            # Admin Tab
+            #if (!is.null(creds$role) && creds$role == "Admin") {
+            #  menuItem("Manage Users", tabName = "admin", icon = icon("gear"))
+            #},
             # Logout Button
             tags$div(
               style = "padding: 10px; border-top: 1px solid #ccc; display: flex; justify-content: center; align-items: center; width: 100%;",
@@ -150,16 +194,14 @@ server <- function(input, output, session) {
     }
   })
   
-  
   # Set the initial active tab when the app starts
   observe({
     if (isTruthy(creds$loggedIn)) {
-      updateTabItems(session, "tabs", "home")  # Default to the "home" tab
+      updateTabItems(session, "tabs", "tests")  # Default to the "home" tab
     } else {
       updateTabItems(session, "tabs", "home")  # Default to the "login" tab for unauthenticated users
     }
   })
-  
   
   #------------------------------------------------------------#
   ##-----| Sign In Logic -----
@@ -182,26 +224,28 @@ server <- function(input, output, session) {
       creds$uuid <- login$localId
       creds$loggedIn <- TRUE
       
-
-      
       # Access Google Auth
       googleAuth()
       
-      # Get Testing Data
-      get_btg_data()
+      # Get Organizational Data
+      rosterDF(get_gsheet(sheet = "Roster"))
+      teamsDF(get_gsheet(sheet = "Teams"))
+      classList(get_gsheet(sheet = "classList"))
+      posList(get_gsheet(sheet = "posList"))
+      sportList(get_gsheet(sheet = "sportList"))
       
       # Redirect to home after successful login
-      updateTabItems(session, "tabs", "home") 
+      updateTabItems(session, "tabs", "tests") 
       
       # Access Hawkin
-      hawkinR::get_access(hdToken)
+      #hawkinR::get_access(hdToken)
       
       # Sync Roster Data
       # Add in future
       
       # Update Force Plate Data
-      updateForcePlates()
-
+      #updateForcePlates()
+      
     } else {
       creds$loggedIn <- FALSE
       shinyjs::html("login-error", "Invalid email or password.")
@@ -212,7 +256,7 @@ server <- function(input, output, session) {
   ##-----| Reset Password -----
   #------------------------------------------------------------#
   
-  ### Forgot Password Link -----
+  ### >Forgot Password Link -----
   observeEvent(input$forgot_password, {
     inputSweetAlert(
       inputId = "reset_btn",
@@ -228,7 +272,7 @@ server <- function(input, output, session) {
     )
   })
   
-  ### Reset Password Button -----
+  ### >Reset Password Button -----
   observeEvent(input$reset_btn, {
     tryCatch(
       {
@@ -285,7 +329,7 @@ server <- function(input, output, session) {
   output$homePageUI <- renderUI({
     if (!isTruthy(creds$loggedIn)) {
       #--------------------------------------------------#
-      ###----- Login Page UI -----
+      ###> Login Page -----
       #--------------------------------------------------#
       # Login page without sidebar
       fluidPage(
@@ -308,8 +352,8 @@ server <- function(input, output, session) {
               solidHeader = TRUE,
               collapsible = FALSE,
               width = 4,
-              textInput("email", "Email", value = "info@btgphysicaltherapy.com"),
-              passwordInput("password", "Password", value = "BTG.2025!"),
+              textInput("email", "Email", placeholder = 'email'), # = "info@btgphysicaltherapy.com"),
+              passwordInput("password", "Password", placeholder = 'password'),# value = "BTG.2025!"),
               actionButton("login_btn", "Login", class = "btn-primary"),
               div(id = "login-error", style = "color: red; margin-top: 10px;"),
               actionLink("forgot_password", "Forgot Password?", style = "margin-top: 20px; color: #6397d0;")
@@ -319,7 +363,7 @@ server <- function(input, output, session) {
       )
     } else {
       #--------------------------------------------------#
-      ###----- Home Page UI -----
+      ###> Home Page -----
       #--------------------------------------------------#
       fluidPage(
         jumbotron(
@@ -335,568 +379,67 @@ server <- function(input, output, session) {
   })
   
   #------------------------------------------------------------#
-  ##-----| Roster Page -----
-  #------------------------------------------------------------#
-  
-  #------------------------------------------------------------#
-  ###----- Roster Page Logic -----
-  #------------------------------------------------------------#
-  
-  #### Reactive Roster Data -----
-  rosterReact <- reactive({
-    # Get the current roster and teams data
-    team_df <- get("teams")
-    df <- get("roster")
-    
-    # Filter by selected teams
-    if (!is.null(input$rost_teamSelect) && length(input$rost_teamSelect) > 0) {
-      # Get the UUIDs corresponding to the selected team names
-      selected_team_uuids <- team_df$id[team_df$proper_name %in% input$rost_teamSelect]
-      
-      # Filter roster for athletes in the selected teams
-      df <- df[sapply(df$teams, function(team) {
-        any(selected_team_uuids %in% unlist(strsplit(team, ",")))
-      }), ]
-    }
-    
-    # Return the filtered data
-    df
-  })
-  
-  #### Update Roster Table -----
-  output$rosterTable <- DT::renderDataTable({
-    DT::datatable(
-      rosterReact(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 10,
-        lengthMenu = c(10, 25, 50),
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 'Bfrtip',
-        buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
-      )
-    )
-  })
-  
-  #------------------------------------------------------------#
-  ###----- Roster Page UI -----
-  #------------------------------------------------------------#
-  
-  output$rosterScreen <- renderUI({
-    fluidPage(
-      title = "Roster Page",
-      fluidRow(
-        column(
-          width = 5,
-          virtualSelectInput(
-            inputId = "rost_teamSelect",
-            label = "Select Team:",
-            choices = c(teams$proper_name),
-            multiple = TRUE,
-            search = TRUE,
-            showValueAsTags = TRUE, 
-            noOfDisplayValues = 5,
-            disableOptionGroupCheckbox = TRUE,
-            width = "100%",
-            dropboxWrapper = "body"
-          )
-        ),
-        column(width = 7)
-      ),
-      fluidRow(
-        DT::dataTableOutput("rosterTable")
-      )
-    )
-    
-  })
-  
-  #------------------------------------------------------------#
-  ##-----| Reports Page -----
-  #------------------------------------------------------------#
-  
-  #------------------------------------------------------------#
-  ###----- Reports Page Logic -----
-  #------------------------------------------------------------#
-  
-  #### Test Variables -----
-  rep_cmj <- reactiveVal()
-  rep_sj <- reactiveVal()
-  rep_mr <- reactiveVal()
-  rep_laneAgility <- reactiveVal()
-  rep_ftf <- reactiveVal()
-  rep_threeQ <- reactiveVal()
-  rep_anthro <- reactiveVal()
-  rep_broad <- reactiveVal()
-  rep_forty <- reactiveVal()
-  rep_vert <- reactiveVal()
-  
-  #### Reactive Roster Data -----
-  reportAth <- reactive({
-    roster_df <- roster
-    team_df <- teams
-    
-    if(!is.null(input$report_teamSelect)) {
-      athList <- roster_df %>% filter(teams %in% input$report_teamSelect) %>% pull(name)
-    } else {
-      athList <- roster_df$name
-    }
-    
-    athList
-  })
-  
-  #### Reactive Dates Data -----
-  reportDates <- reactive({
-    ath <- input$report_athlete
-    
-    # Get Test Dates for Selected Athlete
-    dates <- filter_dates(ath)
-    
-    # Return the dates
-    dates
-  })
-  
-  #### Reactive Test Data -----
-  observeEvent(input$report_load, {
-    ath <- input$report_athlete
-    date <-  input$report_date
-    
-    # CMJ Data
-    rep_cmj(filterCMJ(ath, date))
-    # SJ Data
-    rep_sj(filterSJ(ath, date))
-    # MR Data
-    rep_mr(filterMR(ath, date))
-    # Lane Agility Data
-    rep_laneAgility(filterLaneAgility(ath, date))
-    # 5-10-5 Data
-    rep_ftf(filterFTF(ath, date))
-    # 3/4 Court Data
-    rep_threeQ(filterThreeQ(ath, date))
-    # Anthropometrics Data
-    rep_anthro(filterAnthro(ath, date))
-    # Broad Jump Data
-    rep_broad(filterBroad(ath, date))
-    # 40 Yard Data
-    rep_forty(filterForty(ath, date))
-    # Vertical Jump Data
-    rep_vert(filterVert(ath, date))
-  })
-  
-  #### CMJ Table -----
-  output$cmjTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_cmj(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### SJ Table -----
-  output$sjTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_sj(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### MR Table -----
-  output$mrTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_mr(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### Lane Agility Table -----
-  output$laneAgilityTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_laneAgility(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### 5-10-5 Table -----
-  output$ftfTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_ftf(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### 3/4 Court Table -----
-  output$threeQTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_threeQ(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### Anthropometrics Table -----
-  output$anthroTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_anthro(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### Broad Jump Table -----
-  output$broadTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_broad(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### 40 Yard Table -----
-  output$fortyTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_forty(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #### Vertical Jump Table -----
-  output$vertTable <- DT::renderDataTable({
-    DT::datatable(
-      rep_vert(),
-      extensions = 'Responsive',
-      options = list(
-        pageLength = 2,
-        searching = TRUE,
-        autoWidth = TRUE,
-        scrollX = TRUE,
-        rownames = FALSE,
-        dom = 't'
-      )
-    )
-  })
-  
-  #------------------------------------------------------------#
-  ###----- Reports Page UI -----
-  #------------------------------------------------------------#
-  
-  output$reportScreen <- renderUI({
-    fluidPage(
-      title = "Admin Page",
-      fluidRow(
-        actionLink("backToHome", "Back", icon = icon("arrow-left"), style = "color: #6397d0; margin-bottom: 15px;"),
-      ),
-      #----------------------------------------#
-      ####----- Filters -----
-      #----------------------------------------#
-      fluidRow(
-        column(
-          width = 3,
-          virtualSelectInput(
-            inputId = "report_teamSelect",
-            label = "Select Team:",
-            choices = c(teams$proper_name),
-            multiple = TRUE,
-            search = TRUE,
-            disableOptionGroupCheckbox = TRUE,
-            width = "100%",
-            dropboxWrapper = "body"
-          )
-        ),
-        column(
-          width = 3,
-          virtualSelectInput(
-            inputId = "report_athlete",
-            label = "Select Athlete:", 
-            choices = c(reportAth()),
-            multiple = FALSE,
-            disableOptionGroupCheckbox = TRUE,
-            search = TRUE,
-            width = "100%",
-            dropboxWrapper = "body"
-          )
-        ),
-        column(
-          width = 3,
-          virtualSelectInput(
-            inputId = "report_date",
-            label = "Select Date:", 
-            choices = c(reportDates()),
-            multiple = FALSE,
-            disableOptionGroupCheckbox = TRUE,
-            search = TRUE,
-            width = "100%",
-            dropboxWrapper = "body"
-          )
-        ),
-        column(
-          width = 12,
-          actionButton("report_load", "Load Data", icon = icon("download"), style = "color: #6397d0; margin-bottom: 15px;")
-        )
-      ),
-      #----------------------------------------#
-      ####----- Anthropometrics -----
-      #----------------------------------------#
-      fluidRow(
-        column(
-          width = 12,
-          box(
-            title = "Anthropometrics",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("anthroTable")
-          )
-        )
-      ),
-      #----------------------------------------#
-      ####----- CMJ & SJ -----
-      #----------------------------------------#
-      fluidRow(
-        column(
-          width = 6,
-          box(
-            title = "Counter Movement Jump",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("cmjTable")
-          )
-        ),
-        column(
-          width = 6,
-          box(
-            title = "Squat Jump",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("sjTable")
-          )
-        )
-      ),
-      #----------------------------------------#
-      ####----- Multi-Rebound & Broad -----
-      #----------------------------------------#
-      fluidRow(
-        column(
-          width = 4,
-          box(
-            title = "Vertical Jump",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("vertTable")
-          )
-        ),
-        column(
-          width = 4,
-          box(
-            title = "Multi-Rebound",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("mrTable")
-          )
-        ),
-        column(
-          width = 4,
-          box(
-            title = "Broad Jump",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("broadTable")
-          )
-        )
-      ),
-      fluidRow(
-        column(
-          width = 6,
-          box(
-            title = "5-10-5",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("ftfTable")
-          )
-        ),
-        column(
-          width = 6,
-          box(
-            title = "Lane Agility",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("laneAgilityTable")
-          )
-        )
-      ),
-      fluidRow(
-        column(
-          width = 6,
-          box(
-            title = "40 Yard Sprint",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("fortyTable")
-          )
-        ),
-        column(
-          width = 6,
-          box(
-            title = "3/4 Court Sprint",
-            status = "primary",
-            solidHeader = TRUE,
-            collapsible = TRUE,
-            width = 12,
-            DT::dataTableOutput("threeQTable")
-          )
-        )
-      )
-    )
-  })
-  
-  
-  #------------------------------------------------------------#
   ##-----| Test Page UI -----
   #------------------------------------------------------------#
   
+  
+  #------------------------------------------------------------#
+  ###> Testing Logic -----
+  #------------------------------------------------------------#
   # Reactive Test Screen UI Variable
   test_screen <- reactiveVal()
   
-  #------------------------------------------------------------#
-  ###----- Testing Logic -----
-  #------------------------------------------------------------#
-  #### Return to test choices -----
+  ####| Return to test choices -----
   observeEvent(input$test_return, {
     test_screen("selectTest")
     closeSweetAlert()
   })
   
-  #### Back to Test Selection -----
+  ####| Back to Test Selection -----
   observeEvent(input$backToTestSelect, {
     test_screen("selectTest")
     closeSweetAlert()
   })
   
+  ####| Back to Home Selection -----
+  observeEvent(input$backToHome, {
+    updateTabItems(session, "tabs", "home")
+  })
+  
   #----------------------------------------#
-  ####| Anthro Tests -----
+  ####| Anthropometrics Tests -----
   #----------------------------------------#
   
-  ##### Select Anthro Test -----
+  ##### Select Anthropometrics Test -----
   observeEvent(input$selectTest_anthro, {
     test_screen("anthroTab")
   })
   
-  ##### Submit Anthro Test -----
+  ##### Submit Anthropometrics Test -----
   observeEvent(input$anthroSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$anthroSelect)
+    athInfo <- rosterDF() %>% filter(name == input$anthroSelect)
     tryCatch({
       # Attempt to add anthropometrics
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$anthroSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        height = input$anthroHeight,
-        wingspan = input$anthroWing,
-        reach = input$anthroReach
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$anthroSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        height_ft = as.integer(input$anthroHeight_ft),
+        height_in = as.numeric(input$anthroHeight_in),
+        wingspan = as.integer(input$anthroWing),
+        reach = as.integer(input$anthroReach)
       )
       
       ## Update Sheet Data
       update_gsheet(sheet = "Anthropometrics", data = df)
-    
-      # Update Anthro Variable
-      #updateVar(df, "anthroData")
-      
-      # Save Variables to file
-      #saveVars()
       
       # Show success alert
       show_alert(
@@ -907,8 +450,8 @@ server <- function(input, output, session) {
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
         closeOnClickOutside = TRUE,
+        btn_labels = NA,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
         showCancelButton = FALSE   # Disable default cancel button
@@ -922,14 +465,14 @@ server <- function(input, output, session) {
           actionButton("anthr_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
     })
   })
   
-  ##### Retest Anthro Test -----
+  ##### Retest Anthropometrics Test -----
   observeEvent(input$anthr_retest, {
     updateSelectizeInput(session, "anthroSelect", selected = NULL)
     updateNumericInput(session, "anthroHeight", value = 72)
@@ -950,35 +493,29 @@ server <- function(input, output, session) {
   
   ##### Submit 3/4 Court Sprint Test -----
   observeEvent(input$threeQSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$threeQSelect)
+    athInfo <- rosterDF() %>% filter(name == input$threeQSelect)
     
     tryCatch({
       # Attempt to add 3/4 court sprint
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$threeQSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        surface = input$threeQSurface,
-        time = input$threeQTime
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$threeQSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        surface = as.character(input$threeQSurface),
+        time = as.numeric(input$threeQTime)
       )
       
       ## Update Sheet Data
-      update_gsheet(sheet = "3/4 Court Sprint", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "threeQuarterData")
-      
-      # Save Variables to file
-      #saveVars()
-      
+      update_gsheet(sheet = "3/4 Quarter Court", data = df)
+
       # Show success alert
       show_alert(
         title = "Success!",
@@ -988,13 +525,14 @@ server <- function(input, output, session) {
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
+        btn_labels = NA,
         showConfirmButton = FALSE, # Disable default confirm button
         showCancelButton = FALSE   # Disable default cancel button
       )
     }, error = function(e) {
+      print(e)
       # Show error alert
       show_alert(
         title = "Error",
@@ -1003,7 +541,7 @@ server <- function(input, output, session) {
           actionButton("3_4_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
@@ -1019,44 +557,38 @@ server <- function(input, output, session) {
   })
   
   #----------------------------------------#
-  ####| Vert Tests -----
+  ####| Vertical Tests -----
   #----------------------------------------#
-  ##### Select Vert Test -----
+  ##### Select Vertical Test -----
   observeEvent(input$selectTest_vert, {
     test_screen("vertTab")
   })
   
-  ##### Submit Vert Test -----
+  ##### Submit Vertical Test -----
   observeEvent(input$vertSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$vertSelect)
+    athInfo <- rosterDF() %>% filter(name == input$vertSelect)
     
     tryCatch({
       # Attempt to add vertical jump
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$vertSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        test = input$vertType,
-        height_ft_in = paste0(input$vertHeightFeet,"'", input$vertHeightInch, '"'),
-        height_in = (input$vertHeightFeet * 12) + input$vertHeightInch
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$vertSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        test = as.character(input$vertType),
+        height_ft_in = as.character(paste0(input$vertHeightFeet,"'", input$vertHeightInch, '"')),
+        height_in = as.integer((input$vertHeightFeet * 12) + input$vertHeightInch)
       )
       
       ## Update Sheet Data
       update_gsheet(sheet = "Vertical Jump", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "vertData")
-      
-      # Save Variables to file
-      #saveVars()
       
       # Show success alert
       show_alert(
@@ -1067,7 +599,7 @@ server <- function(input, output, session) {
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
@@ -1082,14 +614,14 @@ server <- function(input, output, session) {
           actionButton("vert_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
     })
   })
   
-  ##### Retest Vert Test -----
+  ##### Retest Vertical Test -----
   observeEvent(input$vert_retest, {
     updateSelectizeInput(session, "vertSelect", selected = NULL)
     updateNumericInput(session, "vertHeightFeet", value = 0)
@@ -1109,34 +641,28 @@ server <- function(input, output, session) {
   
   ##### Submit Broad Jump Test -----
   observeEvent(input$broadSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$broadSelect)
+    athInfo <- rosterDF() %>% filter(name == input$broadSelect)
     
     tryCatch({
       # Attempt to add broad jump
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$broadSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        distance_ft_in = paste0(input$broadDistFeet,"'", input$broadDistInch, '\"'),
-        distance_in = (input$broadDistFeet * 12) + input$broadDistInch
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$broadSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        distance_ft_in = as.character(paste0(input$broadDistFeet,"'", input$broadDistInch, '\"')),
+        distance_in = as.integer((input$broadDistFeet * 12) + input$broadDistInch)
       )
       
       ## Update Sheet Data
       update_gsheet(sheet = "Broad Jump", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "broadData")
-      
-      # Save Variables to file
-      #saveVars()
       
       # Show success alert
       show_alert(
@@ -1147,7 +673,7 @@ server <- function(input, output, session) {
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
@@ -1162,7 +688,7 @@ server <- function(input, output, session) {
           actionButton("broad_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
@@ -1189,37 +715,31 @@ server <- function(input, output, session) {
   
   ##### Submit 40 Yard Test -----
   observeEvent(input$fortySubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$fortySelect)
+    athInfo <- rosterDF() %>% filter(name == input$fortySelect)
     
     tryCatch({
       # Attempt to add 40 yard sprint
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$fortySelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        surface = input$fortySurface,
-        time_10y = input$fortySplit10,
-        time_20y = input$fortySplit20,
-        time_40y = input$fortyTime
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$fortySelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        surface = as.character(input$fortySurface),
+        time_10y = as.numeric(input$fortySplit10),
+        time_20y = as.numeric(input$fortySplit20),
+        time_40y = as.numeric(input$fortyTime)
       )
       
       ## Update Sheet Data
-      update_gsheet(sheet = "40 Yard Sprint", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "fortyData")
-      
-      # Save Variables to file
-      #saveVars()
-      
+      update_gsheet(sheet = "40 Yard Dash", data = df)
+
       # Show success alert
       show_alert(
         title = "Success!",
@@ -1229,7 +749,7 @@ server <- function(input, output, session) {
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
@@ -1244,7 +764,7 @@ server <- function(input, output, session) {
           actionButton("forty_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
@@ -1272,46 +792,40 @@ server <- function(input, output, session) {
   
   ##### Submit 5-10-5 Agility Test -----
   observeEvent(input$ftfSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$ftfSelect)
+    athInfo <- rosterDF() %>% filter(name == input$ftfSelect)
     
     tryCatch({
       # Attempt to add 5-10-5 agility
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$ftfSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        surface = input$ftfSurface,
-        direction = input$ftfDirection,
-        time = input$ftfTime
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$ftfSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        surface = as.character(input$ftfSurface),
+        direction = as.character(input$ftfDirection),
+        time = as.numeric(input$ftfTime)
       )
       
       ## Update Sheet Data
-      update_gsheet(sheet = "5-10-5 Agility", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "fiveTenFiveData")
-      
-      # Save Variables to file
-      #saveVars()
-      
+      update_gsheet(sheet = "5-10-5 Pro Agility", data = df)
+
       # Show success alert
       show_alert(
         title = "Success!",
         text = tagList(
-          tags$p(paste0("5-10-5 Agility for ", input$agilitySelect, " added successfully.")),
+          tags$p(paste0("5-10-5 Agility for ", input$ftfSelect, " added successfully.")),
           actionButton("agility_retest", "Test Again", class = "btn-primary"),
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
@@ -1326,7 +840,7 @@ server <- function(input, output, session) {
           actionButton("agility_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
@@ -1352,45 +866,39 @@ server <- function(input, output, session) {
   
   ##### Submit Pro Lane Agility Test -----
   observeEvent(input$laneAgilSubmitBtn, {
-    athInfo <- get("roster") %>% filter(name == input$laneAgilSelect)
+    athInfo <- rosterDF() %>% filter(name == input$laneAgilSelect)
     
     tryCatch({
       # Attempt to add pro lane agility
       df <- data.frame(
-        timestamp = dateTime(),
-        date = paste0(Sys.Date()),
-        name = input$laneAgilSelect,
-        athleteId = athInfo$id,
-        teams = athInfo$teams,
-        groups = athInfo$groups,
-        active = athInfo$active,
-        email = athInfo$email,
-        position = athInfo$position,
-        class = athInfo$class,
-        sport = athInfo$sport,
-        surface = input$laneAgilSurface,
-        time = input$laneAgilTime
+        timestamp = as.numeric(dateTime()),
+        date = as.character(as.Date(Sys.time())),
+        name = as.character(input$laneAgilSelect),
+        athleteId = as.character(athInfo$id),
+        teams = as.character(athInfo$teams),
+        groups = as.character(athInfo$groups),
+        active = as.character(athInfo$active),
+        email = as.character(athInfo$email),
+        position = as.character(athInfo$position),
+        class = as.character(athInfo$class),
+        sport = as.character(athInfo$sport),
+        surface = as.character(input$laneAgilSurface),
+        time = as.numeric(input$laneAgilTime)
       )
       
       ## Update Sheet Data
-      update_gsheet(sheet = "Pro Lane Agility", data = df)
-      
-      # Update Anthro Variable
-      #updateVar(df, "laneAgilityData")
-      
-      # Save Variables to file
-      #saveVars()
+      update_gsheet(sheet = "Lane Agility", data = df)
       
       # Show success alert
       show_alert(
         title = "Success!",
         text = tagList(
-          tags$p(paste0("Pro Lane Agility for ", input$laneSelect, " added successfully.")),
+          tags$p(paste0("Pro Lane Agility for ", input$laneAgilSelect, " added successfully.")),
           actionButton("lane_retest", "Test Again", class = "btn-primary"),
           actionButton("test_return", "Back to Tests", class = "btn-success")
         ),
         type = "success",
-        btn_labels =  NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE,
         showConfirmButton = FALSE, # Disable default confirm button
@@ -1405,7 +913,7 @@ server <- function(input, output, session) {
           actionButton("lane_retest", "Test Again", class = "btn-primary"),
         ),
         type = "error",
-        btn_labels = NULL,
+        btn_labels = NA,
         closeOnClickOutside = TRUE,
         showCloseButton = TRUE
       )
@@ -1536,7 +1044,7 @@ server <- function(input, output, session) {
       )
     } else if (screen == "anthroTab") {
       #--------------------------------------------------#
-      ####----- Anthro Page UI -----
+      ####----- Anthropometrics Page UI -----
       #--------------------------------------------------#
       fluidPage(
         fluidRow(
@@ -1550,16 +1058,32 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "anthroSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
-            numericInput(
-              inputId = "anthroHeight",
-              label = "Height (in)",
-              min = 0,
-              max = 100,
-              step = 0.25,
-              value = 72
+            fluidRow(
+              column(
+                width = 6,
+                numericInput(
+                  inputId = "anthroHeight_ft",
+                  label = "Height (ft)",
+                  min = 1,
+                  max = 8,
+                  step = 1,
+                  value = 5
+                )
+              ),
+              column(
+                width = 6,
+                numericInput(
+                  inputId = "anthroHeight_in",
+                  label = "Height (in)",
+                  min = 0.0,
+                  max = 12.0,
+                  step = 0.25,
+                  value = 0.0
+                )
+              )
             ),
             numericInput(
               inputId = "anthroWing",
@@ -1604,7 +1128,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "threeQSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             radioGroupButtons(
@@ -1654,7 +1178,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "vertSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             radioGroupButtons(
@@ -1712,7 +1236,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "broadSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             numericInput(
@@ -1758,7 +1282,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "fortySelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             radioGroupButtons(
@@ -1825,7 +1349,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "ftfSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             radioGroupButtons(
@@ -1888,7 +1412,7 @@ server <- function(input, output, session) {
             selectizeInput(
               inputId = "laneAgilSelect",
               label = "Select Athlete:",
-              choices = c(roster$name),
+              choices = c(rosterDF()$name),
               size = 5,
             ),
             radioGroupButtons(
@@ -1929,4 +1453,6 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server, enableBookmarking = "server")
+
+
 

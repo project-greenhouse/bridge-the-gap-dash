@@ -1,91 +1,40 @@
 #------------------------------------------------------------#
 # ----- Dependencies -----
 #------------------------------------------------------------#
-# Define the list of required packages
-required_packages <- c(
-  "shiny",
-  "bs4Dash",
-  "googlesheets4",
-  "googledrive",
-  "hawkinR",
-  "shinyWidgets",
-  "waiter",
-  "tidyverse",
-  "base64enc",
-  "jsonlite",
-  "gargle",
-  "igniteR",
-  "waiter",
-  "DT",
-  "shinyjs"
-)
-
-# Function to install and load packages
-install_and_load <- function(package) {
-  if (!requireNamespace(package, quietly = TRUE)) {
-    message(paste("Installing package:", package))
-    install.packages(package, dependencies = TRUE)
-  }
-  library(package, character.only = TRUE)
-}
-
-# Loop through each package and ensure it is installed and loaded
-lapply(required_packages, install_and_load)
-
-#------------------------------------------------------------#
-# ----- Create Serial Date Time -----
-#------------------------------------------------------------#
-dateTime <- function() {
-  # Get the current system time
-  current_time <- Sys.time()
-  
-  # Convert to yyyymmddhhmmss format
-  formatted_time <- format(current_time, "%Y%m%d%H%M%S")
-  
-  options(scipen = 999)
-  
-  return(as.numeric(formatted_time))
-}
-
-#------------------------------------------------------------#
-# ----- Convert Inches to Feet-Inches -----
-#------------------------------------------------------------#
-feet_inches <- function(inches) {
-  feet <- inches %/% 12      # Calculate the number of feet
-  remaining_inches <- inches %% 12  # Calculate the remaining inches
-  paste(feet, "'", remaining_inches, '"', sep = "")
-}
-
-#------------------------------------------------------------#
-# ----- Store Vars in File -----
-#------------------------------------------------------------#
-saveVars <- function() {
-  save(cmjData, sjData, mrData, fiveTenFiveData, laneAgilityData, fortyData, vertData, threeQuarterData, anthroData, broadData, teams, roster, acctManager, sportList, posList, classList, file = "backup_data.RData")
-  drive_upload("backup_data.RData", path = as_id(Sys.getenv("BACKUP_FOLDER_ID")), type = "application/x-gzip", overwrite = TRUE)
-}
-
-#------------------------------------------------------------#
-# ----- Update Data Variable -----
-#------------------------------------------------------------#
-updateVar <- function(newdata, varName) {
-  # Join new data to existing data
-  df <- rbind(get(varName), newdata)
-  # Assign to previous variable
-  assign(varName, df)
-}
+library("shinyWidgets")
+library("tidyverse")
+library("base64enc")
+library("jsonlite")
+library("config")
+library("shinyjs")
+library("DT")
+library("shiny")
+library("bs4Dash")
+library("googlesheets4")
+library("googledrive")
+library("hawkinR")
+library("waiter")
+library("igniteR")
+library("gargle")
 
 #------------------------------------------------------------#
 # ----- Env Variables -----
 #------------------------------------------------------------#
 
+# Initialize Configuration
+config <- config::get()
+
 ## Hawkin Dynamics
-hdToken <- Sys.getenv("HD_TOKEN")
+hdToken <- config$HD_TOKEN
 
 ## Google Sheet
-gsheetId <- Sys.getenv("GSHEET_ID")
+gsheetId <- config$GSHEET_ID
 
 # Google Drive Folder ID
-folderId <- Sys.getenv("BACKUP_FOLDER_ID")
+folderId <- config$BACKUP_FOLDER_ID
+
+# Google Service Account
+gcpServiceAccount <- config$GCP_SERVICE_ACCOUNT_BASE64
 
 #------------------------------------------------------------#
 #----- Google Sheets -----
@@ -94,9 +43,7 @@ folderId <- Sys.getenv("BACKUP_FOLDER_ID")
 ## Google Authentication
 googleAuth <- function() {
   
-  base64_json <- Sys.getenv("GCP_SERVICE_ACCOUNT_BASE64")
-  
-  decoded_json <- rawToChar(jsonlite::base64_dec(base64_json))
+  decoded_json <- rawToChar(jsonlite::base64_dec(gcpServiceAccount))
   
   # Write decoded_json to a temporary file
   temp_file <- tempfile(fileext = ".json")
@@ -128,7 +75,31 @@ get_gsheet <- function(sheet, range = NULL) {
 
 ## Update Sheet Data
 update_gsheet <- function(sheet, data) {
-  googlesheets4::sheet_append(ss = get("gsheetId"), data, sheet)
+  googlesheets4::sheet_append(ss = gsheetId, data, sheet)
+}
+
+#------------------------------------------------------------#
+# ----- Create Serial Date Time -----
+#------------------------------------------------------------#
+dateTime <- function() {
+  # Get the current system time
+  current_time <- Sys.time()
+  
+  # Convert to yyyymmddhhmmss format
+  formatted_time <- format(current_time, "%Y%m%d%H%M%S")
+  
+  options(scipen = 999)
+  
+  return(as.numeric(formatted_time))
+}
+
+#------------------------------------------------------------#
+# ----- Convert Inches to Feet-Inches -----
+#------------------------------------------------------------#
+feet_inches <- function(inches) {
+  feet <- inches %/% 12      # Calculate the number of feet
+  remaining_inches <- inches %% 12  # Calculate the remaining inches
+  paste(feet, "'", remaining_inches, '"', sep = "")
 }
 
 #------------------------------------------------------------#
@@ -167,6 +138,17 @@ safe_sign_in <- function(email, password) {
       list(success = FALSE, error = paste("Sign-in failed:", conditionMessage(e)))
     }
   )
+}
+
+## Get Organization Data -----
+get_btg_data <- function() {
+  
+  base::assign("rosterDF", get_gsheet(sheet = "Roster"))
+  base::assign("teamsDF" , get_gsheet(sheet = "Teams"))
+  base::assign("classList", get_gsheet(sheet = "classList"))
+  base::assign("posList", get_gsheet(sheet = "posList"))
+  base::assign("sportList", get_gsheet(sheet = "sportList"))
+
 }
 
 ## Update Force Plate Sheets -----
@@ -438,20 +420,8 @@ replace_names_with_ids <- function(teamValues, label_df) {
 #------------------------------------------------------------#
 #----- Test Data -----
 #------------------------------------------------------------#
-get_btg_data <- function() {
-  # List files in the folder (replace "Folder_ID" with your actual folder ID)
-  #folder_id <- Sys.getenv("BACKUP_FOLDER_ID")
-  
-  # Download all .RData files in the folder
-  #file <- "backup_env_vars.RData"
-  #drive_download(file = file, path = file, overwrite = TRUE)
-  #load(file)
-  
-  # Download all .RData files in the folder
-  #file <- "backup_data.RData"
-  #drive_download(file = file, path = file, overwrite = TRUE)
-  #load(file)
-  
+
+get_test_data <- function() {
   assign("cmjData", get_gsheet("CMJ"))
   assign("sjData", get_gsheet("Squat Jump"))
   assign("mrData", get_gsheet("Multi Rebound"))

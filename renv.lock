@@ -427,7 +427,12 @@
     "hawkinR": {
       "Package": "hawkinR",
       "Version": "1.2.0",
-      "Source": "unknown",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "hawkinR2",
+      "RemoteUsername": "project-greenhouse",
+      "RemoteSha": "8d351a775ce112a0868ae7547882e6124ab5ede9",
       "Requirements": [
         "R",
         "arrow",
@@ -447,7 +452,7 @@
         "tidyselect",
         "writexl"
       ],
-      "Hash": "580a136e5c2a18f254344359fe3bdd9f"
+      "Hash": "5bfcda2c862312e8bc9218c3ea786691"
     },
     "highr": {
       "Package": "highr",

@@ -1,4 +1,22 @@
 #------------------------------------------------------------#
+# ----- Store Vars in File -----
+#------------------------------------------------------------#
+saveVars <- function() {
+  save(cmjData, sjData, mrData, fiveTenFiveData, laneAgilityData, fortyData, vertData, threeQuarterData, anthroData, broadData, teams, roster, acctManager, sportList, posList, classList, file = "backup_data.RData")
+  drive_upload("backup_data.RData", path = as_id(Sys.getenv("BACKUP_FOLDER_ID")), type = "application/x-gzip", overwrite = TRUE)
+}
+
+#------------------------------------------------------------#
+# ----- Update Data Variable -----
+#------------------------------------------------------------#
+updateVar <- function(newdata, varName) {
+  # Join new data to existing data
+  df <- rbind(get(varName), newdata)
+  # Assign to previous variable
+  assign(varName, df)
+}
+
+#------------------------------------------------------------#
 #----- Update Force Plate Data -----
 #------------------------------------------------------------#
 updateForcePlates <- function() {
@@ -141,7 +159,7 @@ output$sidebarUI <- renderUI({
           # Sidebar Menu Items
           tags$div(
             style = "flex-grow: 1;",
-            menuItem("Home", tabName = "home", icon = icon("home"), selected = TRUE),  # Default tab for logged-in users
+            menuItem("Home", tabName = "home", icon = icon("home"), selected = TRUE),
             menuItem("Roster", tabName = "roster", icon = icon("users")),
             menuItem("Tests", tabName = "tests", icon = icon("stopwatch")),
             if (!is.null(creds$role) && creds$role == "Admin") {
