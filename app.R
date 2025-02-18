@@ -57,7 +57,7 @@ ui <- dashboardPage(
     useWaiter(),  # Initialize waiter
     useShinyjs(),  # Initialize shinyjs
     # Define the loading screen for busy states
-    waiter_on_busy(
+    waiter_show_on_load(
       color = "white",  # Background color for loading screen
       html = tagList(
         tags$div(
@@ -67,7 +67,7 @@ ui <- dashboardPage(
             style = "width: 150px; height: 150px; animation: spin 2s linear infinite;"
           ),
           tags$p(
-            "Loading...",
+            "Building The Bridge...",
             style = "font-size: 20px; color: #333; margin-top: 10px;"
           )
         ),
@@ -82,7 +82,7 @@ ui <- dashboardPage(
     tabItems(
       tabItem(tabName = "home", uiOutput("homePageUI")),
       #tabItem(tabName = "admin", uiOutput("adminScreen")),
-      #tabItem(tabName = "roster", uiOutput("rosterScreen")),
+      tabItem(tabName = "roster", uiOutput("rosterScreen")),
       #tabItem(tabName = "reports", uiOutput("reportScreen")),
       tabItem(tabName = "tests", uiOutput("testScreen"))
     )
@@ -94,6 +94,98 @@ ui <- dashboardPage(
 #------------------------------------------------------------#
 
 server <- function(input, output, session) {
+  
+  #------------------------------------------------------------#
+  ##-----| Waiter Loading Screens -----
+  #------------------------------------------------------------#
+  
+  # Waiter for Reports Builder
+  logIn_waiter <- Waiter$new(
+    id = c("logIn_status"),  # UI element to cover during the operation
+    color = "#555",  # Background color for loading screen
+    html = tagList(
+      tags$div(
+        style = "display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        height: 100%;",
+        tags$img(
+          src = "btg-logo-black-trans-950.png",
+          style = "width: 150px; height: 150px; animation: spin 2s linear infinite;"
+        ),
+        tags$p(
+          "Building The Bridge...",
+          style = "font-size: 20px; color: #333; margin-top: 10px;"
+        )
+      ),
+      tags$style(HTML("
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      "))
+    )
+  )
+  
+  # Waiter for Roster Sync
+  roster_waiter <- Waiter$new(
+    id = c("rosterSync_status"),  # Specify UI element IDs to cover
+    html = tagList(
+      h3("Syncing Roster..."),
+      div(class = "progress", 
+          div(class = "progress-bar progress-bar-striped progress-bar-animated", 
+              role = "progressbar", style = "width: 100%;")
+      )
+    ),
+    color = "#333"  # Background overlay color
+  )
+  
+  # Waiter for Tests Sync
+  testSync_waiter <- Waiter$new(
+    id = c("testSync_status"),  # Specify UI element IDs to cover
+    html = tagList(
+      h3("Syncing Test Data..."),
+      div(class = "progress", 
+          div(class = "progress-bar progress-bar-striped progress-bar-animated", 
+              role = "progressbar", style = "width: 100%;")
+      )
+    ),
+    color = "#333"  # Background overlay color
+  )
+  
+  # Waiter for Reports Builder
+  testAdd_waiter <- Waiter$new(
+    id = c("testAdd_status"),  # UI element to cover during the operation
+    color = "#555",  # Background color for loading screen
+    html = tagList(
+      tags$div(
+        style = "display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        height: 100%;",
+        tags$img(
+          src = "btg-logo-black-trans-950.png",
+          style = "width: 150px; height: 150px; animation: spin 2s linear infinite;"
+        ),
+        tags$p(
+          "Submitting Test...",
+          style = "font-size: 20px; color: #333; margin-top: 10px;"
+        )
+      ),
+      tags$style(HTML("
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      "))
+    )
+  )
+
+  
+  # Close Opening Loading Screen
+  waiter_hide()
   
   #------------------------------------------------------------#
   ##-----| Auth Reactive Values -----
@@ -116,6 +208,7 @@ server <- function(input, output, session) {
   classList <- reactiveVal()
   posList <- reactiveVal()
   sportList <- reactiveVal()
+  lastSyncDF <- reactiveVal()
   
   #------------------------------------------------------------#
   ##-----| Testing Reactive Data -----
@@ -149,6 +242,12 @@ server <- function(input, output, session) {
   ##-----| Sidebar Logic -----
   #------------------------------------------------------------#
   
+  # Observe tab changes and close the sidebar
+  observeEvent(input$tabs, {
+    bs4Dash::updateSidebar(id = "tabs", session = session)
+  })
+  
+  # Sidebar UI
   output$sidebarUI <- renderUI({
     if (isTruthy(creds$loggedIn)) {
       sidebarMenu(
@@ -159,7 +258,7 @@ server <- function(input, output, session) {
           tags$div(
             style = "flex-grow: 1;",
             menuItem("Home", tabName = "home", icon = icon("home"), selected = TRUE),
-            #menuItem("Roster", tabName = "roster", icon = icon("users")),
+            menuItem("Roster", tabName = "roster", icon = icon("users")),
             menuItem("Tests", tabName = "tests", icon = icon("stopwatch")),
             # Admin Tab
             #if (!is.null(creds$role) && creds$role == "Admin") {
@@ -196,8 +295,8 @@ server <- function(input, output, session) {
   
   # Set the initial active tab when the app starts
   observe({
-    if (isTruthy(creds$loggedIn)) {
-      updateTabItems(session, "tabs", "tests")  # Default to the "home" tab
+    if (!isTruthy(creds$loggedIn)) {
+      updateTabItems(session, "tabs", "home")  # Default to the "home" tab
     } else {
       updateTabItems(session, "tabs", "home")  # Default to the "login" tab for unauthenticated users
     }
@@ -211,6 +310,9 @@ server <- function(input, output, session) {
   observeEvent(input$login_btn, {
     email <- input$email
     password <- input$password
+    
+    # Start Waiter Screen
+    logIn_waiter$show()
     
     login <- safe_sign_in(email = email, password = password)
     
@@ -226,6 +328,11 @@ server <- function(input, output, session) {
       
       # Access Google Auth
       googleAuth()
+      # Access Hawkin
+      hawkinR::get_access(hdToken)
+      
+      # Last Sync Times
+      #lastSyncDF(get_gsheet(sheet = "Last Sync Time"))
       
       # Get Organizational Data
       rosterDF(get_gsheet(sheet = "Roster"))
@@ -233,18 +340,19 @@ server <- function(input, output, session) {
       classList(get_gsheet(sheet = "classList"))
       posList(get_gsheet(sheet = "posList"))
       sportList(get_gsheet(sheet = "sportList"))
+      lastSyncDF(get_gsheet(sheet = "Last Sync Time"))
       
       # Redirect to home after successful login
-      updateTabItems(session, "tabs", "tests") 
-      
-      # Access Hawkin
-      #hawkinR::get_access(hdToken)
-      
+      updateTabItems(session, "tabs", "home") 
+
       # Sync Roster Data
       # Add in future
       
       # Update Force Plate Data
       #updateForcePlates()
+      
+      # Close Login Waiter
+      logIn_waiter$hide()
       
     } else {
       creds$loggedIn <- FALSE
@@ -256,7 +364,7 @@ server <- function(input, output, session) {
   ##-----| Reset Password -----
   #------------------------------------------------------------#
   
-  ### >Forgot Password Link -----
+  ###> Forgot Password Link -----
   observeEvent(input$forgot_password, {
     inputSweetAlert(
       inputId = "reset_btn",
@@ -272,7 +380,7 @@ server <- function(input, output, session) {
     )
   })
   
-  ### >Reset Password Button -----
+  ###> Reset Password Button -----
   observeEvent(input$reset_btn, {
     tryCatch(
       {
@@ -316,26 +424,92 @@ server <- function(input, output, session) {
   })
   
   #------------------------------------------------------------#
-  ##-----| Home Page Logic -----
+  ##-----| Home Page -----
   #------------------------------------------------------------#
-  observeEvent(input$jumbo_btn, {
+  
+  #------------------------------------------------------------#
+  ###> Home Page Logic -----
+  #------------------------------------------------------------#
+  
+  # Home Page to Tests
+  observeEvent(input$homeToTests, {
     updateTabItems(session, "tabs", "tests")
   })
   
+  # Home Page force Sync Data
+  observeEvent(input$homeSyncForceData, {
+    # Show the loading screen
+    #testSync_waiter$show()
+    
+    # Sync logic
+    tryCatch({
+      # Attempt to sync data
+      updateForcePlates(lastSync = lastSyncDF())
+      
+      # Hide the loading screen after completion
+      #testSync_waiter$hide()
+      
+      # Show success alert
+      show_alert(
+        title = "Success!",
+        text = tagList(
+          tags$p("Test sync completed successfully!")
+        ),
+        type = "success",
+        btn_labels = NA,
+        closeOnClickOutside = TRUE,
+        showCloseButton = TRUE
+      )
+      
+    }, error = function(e) {
+      
+      # Hide the loading screen after completion
+      #testSync_waiter$hide() 
+      
+      # Show error alert
+      show_alert(
+        title = "Error",
+        text = tagList(
+          tags$p(paste("Error during test sync:", e$message))
+        ),
+        type = "error",
+        btn_labels = NA,
+        closeOnClickOutside = TRUE,
+        showCloseButton = TRUE
+      )
+    })
+    
+    #updateTabItems(session, "tabs", "home")
+  })
+  
+  # Home Page Manage Roster
+  observeEvent(input$homeManageRoster, {
+    updateTabItems(session, "tabs", "roster")
+  })
+  
+  # Home Page View Reports
+  observeEvent(input$homeReports, {
+    updateTabItems(session, "tabs", "reports")
+  })
+  
   #------------------------------------------------------------#
-  ##-----| Home Page UI -----
+  ###> Home Page UI -----
   #------------------------------------------------------------#
   
   output$homePageUI <- renderUI({
     if (!isTruthy(creds$loggedIn)) {
       #--------------------------------------------------#
-      ###> Login Page -----
+      #### | Login Page -----
       #--------------------------------------------------#
       # Login page without sidebar
       fluidPage(
         div(
           id = "login-panel",
-          style = "background-color: black; display: flex; flex-direction: column; align-items: center; height: 100vh; padding: 0;",
+          style = "background-color: black; 
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          height: 100vh; padding: 0;",
           div(
             style = "width: 75%; text-align: center;",
             tags$img(
@@ -352,8 +526,20 @@ server <- function(input, output, session) {
               solidHeader = TRUE,
               collapsible = FALSE,
               width = 4,
-              textInput("email", "Email", placeholder = 'email'), # = "info@btgphysicaltherapy.com"),
-              passwordInput("password", "Password", placeholder = 'password'),# value = "BTG.2025!"),
+              textInput(
+                inputId = "email", 
+                label = "Email", 
+                value = "info@btgphysicaltherapy.com",
+                #placeholder = 'email',
+                width = NULL
+              ),
+              passwordInput(
+                inputId = "password", 
+                label = "Password", 
+                #placeholder = 'password', 
+                value = "BTG.2025!",
+                width = NULL
+              ),
               actionButton("login_btn", "Login", class = "btn-primary"),
               div(id = "login-error", style = "color: red; margin-top: 10px;"),
               actionLink("forgot_password", "Forgot Password?", style = "margin-top: 20px; color: #6397d0;")
@@ -363,25 +549,428 @@ server <- function(input, output, session) {
       )
     } else {
       #--------------------------------------------------#
-      ###> Home Page -----
+      ####  | Home Page -----
       #--------------------------------------------------#
       fluidPage(
-        jumbotron(
-          title = "Bridge The Gap Performance PT Testing Dashboard",
-          lead = "Welcome to the BTG Performance PT testing dashboard. Where we connect collection to reporting to action.",
-          status = "primary",
-          background = "black",
-          width = 12,
-          btnName = NULL
+        div(
+          id = "home-panel",
+          style = "background-color: black; 
+          display: flex; flex-direction: column; 
+          align-items: center; height: 100vh; 
+          padding: 0;",
+          div(
+            style = "width: 75%; text-align: center;",
+            tags$img(
+              src = "btg-wallpaper-white-trans.png",
+              alt = "Logo",
+              style = "width: 50%; height: auto; display: block; margin: 0 auto;"
+            )
+          ),
+          div(
+            style = "width: 100%; display: flex; justify-content: center; margin-top: 0;",
+            box(
+              title = "Quick Links",
+              status = "primary",
+              solidHeader = TRUE,
+              collapsible = FALSE,
+              width = 6,
+              column(
+                width = 12,
+                actionButton("homeToTests", "Record Tests", class = "btn-primary", width = "100%"),
+                br(),br(),
+                actionButton("homeSyncForceData", "Sync Force Data", class = "btn-primary", width = "100%"),
+                br(),br(),
+                actionButton("homeReports", "View Reports", class = "btn-primary", width = "100%"),
+                br(),br(),
+                actionButton("homeManageRoster", "Manage Roster", class = "btn-primary", width = "100%")
+                
+              )
+            )
+          )
         )
       )
     }
   })
   
   #------------------------------------------------------------#
-  ##-----| Test Page UI -----
+  ##-----| Roster Page -----
   #------------------------------------------------------------#
   
+  #------------------------------------------------------------#
+  ###> Roster Logic -----
+  #------------------------------------------------------------#
+  
+  #### | Roster Sync -----
+  observeEvent(input$rosterSync, {
+    # Show the loading screen
+    #roster_waiter$show()
+    
+    # Get HD Roster
+    hdRoster <- hawkinR::get_athletes() %>% select(id, name, teams, groups, active, email, position, class, sport, updated)
+    
+    # Current GSheet Roster
+    gRoster <- rosterDF()
+    
+    # Sync logic
+    tryCatch({
+      # Attempt to sync data
+      syncRosters(hd_ros = hdRoster, gsheet_roster = gRoster)
+      
+      # Hide the loading screen after completion
+      #roster_waiter$hide()
+      
+      # Show success alert
+      show_alert(
+        title = "Success!",
+        text = tagList(
+          tags$p("Roster sync completed successfully!")
+        ),
+        type = "success",
+        btn_labels = NA,
+        closeOnClickOutside = TRUE,
+        showCloseButton = TRUE
+      )
+      
+    }, error = function(e) {
+      
+      # Hide the loading screen after completion
+      #roster_waiter$hide() 
+      
+      # Show error alert
+      show_alert(
+        title = "Error",
+        text = tagList(
+          tags$p(paste("Error during roster sync:", e$message))
+        ),
+        type = "error",
+        btn_labels = NA,
+        closeOnClickOutside = TRUE,
+        showCloseButton = TRUE
+      )
+    })
+  })
+  
+  #### | Add Athlete -----
+  ##### > Add Athlete Dialog -----
+  observeEvent(input$rosteraddAthlete, {
+    
+    # Show success alert
+    show_alert(
+      title = "Add Athlete",
+      text = tags$div(
+        # Add Name
+        textInput(inputId = "addAthName", label = "Name *", value = "", placeholder = "First Last"),
+        # Add Email
+        textInput(inputId = "addAthEmail", label = "Email *", value = "", placeholder = "test@email.com"),
+        # Add Teams
+        virtualSelectInput(
+          inputId = "addAthTeams",
+          label = "Teams *",
+          multiple = TRUE,
+          choices = teamsDF()$proper_name,
+          selected = NULL
+        ),
+        # Add Groups
+        #selectInput(inputId = "addAthGroups",
+        #            label = "Teams",
+        #            multiple = TRUE,
+        #            choices = teamsDF()$proper_name,
+        #            selected = NULL),
+        # Add Class
+        virtualSelectInput(
+          inputId = "addAthClass",
+          label = "Class",
+          multiple = FALSE,
+          choices = classList()$Class,
+          showValueAsTags = TRUE,
+          search = TRUE,
+          selected = NULL
+        ),
+        # Add Sport
+        virtualSelectInput(
+          inputId = "addAthSport",
+          label = "Sport",
+          multiple = TRUE,
+          choices = sportList()$Sport,
+          showValueAsTags = TRUE,
+          search = TRUE,
+          selected = NULL
+        ),
+        # Add Position
+        virtualSelectInput(
+          inputId = "addAthPosition",
+          label = "Position",
+          multiple = TRUE,
+          choices = posList()$Position,
+          showValueAsTags = TRUE,
+          search = TRUE,
+          selected = NULL
+        ),
+        actionButton(inputId = "addAthCancelBttn", label = "Cancel", class = "btn-primary"),
+        actionButton(inputId = "addAthAddBttn", label = "Add Athelte", class = "btn-success")
+      ),
+      type = "info",
+      btn_labels = NA,
+      closeOnClickOutside = FALSE,
+      showCloseButton = TRUE
+    )
+  
+  })
+  
+  ##### > Add Athlete Action -----
+  observeEvent(input$addAthAddBttn, {
+    
+    # Create Athlete Data Frame
+    df <- data.frame(
+      name = as.character(input$addAthName),
+      image = NULL,
+      active = TRUE,
+      teams = as.list(input$addAthTeams),
+      groups = as.list(input$addAthGroups),
+      email = as.character(input$addAthEmail),
+      position = as.character(paste0(input$addAthPosition, sep = ",")),
+      class = as.character(paste0(input$addAthClass, sep = ",")),
+      sport = as.character(paste0(input$addAthSport, sep = ",")),
+      updated = as.character(Sys.Date())
+    )
+    
+    tryCatch(
+      {
+        # Add athlete to Hawkin Dynamics
+        hd_athlete <- hawkinR::create_athletes(
+          athleteData = df
+        )
+        
+        # Close the alert
+        closeSweetAlert()
+        
+        # Show success alert
+        show_alert(
+          title = "Success!",
+          text = tagList(
+            tags$p("Athlete added successfully!"),
+            actionButton("addAthleteAgain", "Add Another", class = "btn-primary"),
+            actionButton("test_return", "Back to Tests", class = "btn-success")
+          ),
+          type = "success",
+          closeOnClickOutside = TRUE,
+          btn_labels = NA,
+          showCloseButton = TRUE
+        )
+      },
+      error = function(e) {
+        # Show error alert
+        show_alert(
+          title = "Error",
+          text = tagList(
+            tags$p(paste("Failed to add athlete:", conditionMessage(e))),
+            actionButton(inputId = "addAthleteAgain", label = "Try Again", class = "btn-primary"),
+            actionButton(inputId = "addAthCancelBttn", label = "Cancel", class = "btn-primary"),
+          ),
+          type = "error",
+          btn_labels = NA,
+          closeOnClickOutside = TRUE,
+          showCloseButton = TRUE
+        )
+      }
+    )
+
+  })
+  
+  ##### > Add Athlete Cancel -----
+  observeEvent(input$addAthCancelBttn, {
+    closeSweetAlert()
+  })
+  
+  ##### > Add Athlete Again -----
+  observeEvent(input$addAthleteAgain, {
+    closeSweetAlert()
+    
+    # Show success alert
+    show_alert(
+      title = "Add Athlete",
+      text = tag$div(
+        # Add Name
+        textInput(inputId = "addAthName", label = "Name *", value = "", placeholder = "First Last"),
+        # Add Email
+        textInput(inputId = "addAthEmail", label = "Email *", value = "", placeholder = "test@email.com"),
+        # Add Teams
+        virtualSelectInput(
+          inputId = "addAthTeams",
+          label = "Teams *",
+          multiple = TRUE,
+          choices = teamsDF()$proper_name,
+          selected = NULL
+        ),
+        # Add Groups
+        #selectInput(inputId = "addAthGroups",
+        #            label = "Teams",
+        #            multiple = TRUE,
+        #            choices = teamsDF()$proper_name,
+        #            selected = NULL),
+        # Add Class
+        virtualSelectInput(
+          inputId = "addAthClass",
+          label = "Class",
+          multiple = FALSE,
+          choices = classList()$Class,
+          showValueAsTags = TRUE,
+          selected = NULL
+        ),
+        # Add Sport
+        virtualSelectInput(
+          inputId = "addAthSport",
+          label = "Sport",
+          multiple = TRUE,
+          choices = sportList()$Sport,
+          showValueAsTags = TRUE,
+          selected = NULL
+        ),
+        # Add Position
+        virtualSelectInput(
+          inputId = "addAthPosition",
+          label = "Position",
+          multiple = TRUE,
+          choices = posList()$Position,
+          showValueAsTags = TRUE,
+          selected = NULL
+        ),
+        actionButton(inputId = "addAthCancelBttn", label = "Cancel", class = "btn-primary"),
+        actionButton(inputId = "addAthAddBttn", label = "Add Athelte", class = "btn-success")
+      ),
+      type = "info",
+      btn_labels = NA,
+      closeOnClickOutside = FALSE,
+      showCloseButton = TRUE
+    )
+    
+  })
+  
+  #### | Bulk Update Athletes -----
+  
+  #### | Roster Table -----
+  output$rosterTable <- renderDataTable({
+    # Roster
+    roster <- rosterDF()
+    # Teams
+    teams <- teamsDF() %>% select(id, proper_name)
+    
+    # Ensure that both data frames have the expected structure
+    updated_rosterDF <- roster %>%
+      # Split the 'teams' column into multiple rows based on commas
+      separate_rows(teams, sep = ",") %>%
+      # Remove leading and trailing whitespace from team IDs (if any)
+      mutate(teams = str_trim(teams)) %>%
+      # Join with `teamDF` to get proper names
+      left_join(teams, by = c("teams" = "id")) %>%
+      # Combine the matched `proper_name` values back into a single string
+      group_by(name, email, active) %>%
+      summarise(teams = paste(unique(proper_name), collapse = ", "), .groups = "drop") %>%
+      # Select relevant columns
+      select(name, teams, email, active)
+    
+    # Render the data table
+    updated_rosterDF %>% 
+      datatable(
+        rownames = FALSE,
+        options = list(
+          dom = 'Bfrtip',
+          buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+          pageLength = 10,
+          lengthMenu = c(10, 25, 50, 100),
+          autoWidth = TRUE,
+          scrollX = TRUE,
+          columnDefs = list(
+            list(className = 'dt-center', targets = "_all")
+          )
+        )
+      )
+  })
+  
+  #------------------------------------------------------------#
+  ###> Roster UI -----
+  #------------------------------------------------------------#
+  output$rosterScreen <- renderUI({
+    fluidPage(
+      title = "Roster Page",
+      fluidRow(
+        column(
+          width = 3,
+          class = "d-flex align-items-center",
+          actionLink(
+            "backToHome", 
+            "Home", 
+            icon = icon("arrow-left"), 
+            style = "color: #6397d0; margin-bottom: 15px; margin-top: 15px;"
+          )
+        ),
+        column(
+          width = 9,
+          class = "d-flex justify-content-end align-items-center"
+        )
+      ),
+      fluidRow(
+        box(
+          title = "Roster Actions",
+          solidHeader = TRUE,
+          width = 12,
+          status = "primary",
+          background = "primary",
+          fluidRow(
+            
+            # Sync Roster
+            column(
+              width = 3,
+              class = "d-flex align-items-center",
+              actionBttn(
+                inputId = "rosterSync",
+                label = "Sync",
+                icon = icon("sync"),
+                style = "material-flat",
+                size = "sm"
+              )
+            ),
+            column(
+              width = 3,
+              actionBttn(
+                inputId = "rosteraddAthlete",
+                label = "Add",
+                icon = icon("person-circle-plus"),
+                style = "material-flat",
+                size = "sm"
+              )
+            ),
+            # Update Athlete
+            column(
+              width = 3,
+              actionBttn(
+                inputId = "rosterupdateAthlete",
+                label = "Update",
+                icon = icon("person"),
+                style = "material-flat",
+                size = "sm"
+              )
+            )
+          )
+        )
+      ),
+      br(),
+      fluidRow(
+        box(
+          title = "Roster",
+          status = "primary",
+          solidHeader = TRUE,
+          collapsible = FALSE,
+          width = 12,
+          DT::dataTableOutput("rosterTable")
+        )
+      )
+    )
+  })
+  
+  #------------------------------------------------------------#
+  ##-----| Testing Page -----
+  #------------------------------------------------------------#
   
   #------------------------------------------------------------#
   ###> Testing Logic -----
@@ -417,9 +1006,14 @@ server <- function(input, output, session) {
   
   ##### Submit Anthropometrics Test -----
   observeEvent(input$anthroSubmitBtn, {
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$anthroSelect)
+    
+    # Attempt to add anthropometrics
     tryCatch({
-      # Attempt to add anthropometrics
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -440,6 +1034,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "Anthropometrics", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$hide()
       
       # Show success alert
       show_alert(
@@ -493,10 +1090,15 @@ server <- function(input, output, session) {
   
   ##### Submit 3/4 Court Sprint Test -----
   observeEvent(input$threeQSubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$threeQSelect)
     
+    # Attempt to add 3/4 court sprint
     tryCatch({
-      # Attempt to add 3/4 court sprint
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -515,6 +1117,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "3/4 Quarter Court", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$hide()
 
       # Show success alert
       show_alert(
@@ -566,10 +1171,15 @@ server <- function(input, output, session) {
   
   ##### Submit Vertical Test -----
   observeEvent(input$vertSubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$vertSelect)
     
+    # Attempt to add vertical jump
     tryCatch({
-      # Attempt to add vertical jump
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -589,6 +1199,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "Vertical Jump", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$show()
       
       # Show success alert
       show_alert(
@@ -641,10 +1254,15 @@ server <- function(input, output, session) {
   
   ##### Submit Broad Jump Test -----
   observeEvent(input$broadSubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$broadSelect)
     
+    # Attempt to add broad jump
     tryCatch({
-      # Attempt to add broad jump
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -663,6 +1281,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "Broad Jump", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$hide()
       
       # Show success alert
       show_alert(
@@ -715,10 +1336,15 @@ server <- function(input, output, session) {
   
   ##### Submit 40 Yard Test -----
   observeEvent(input$fortySubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$fortySelect)
     
+    # Attempt to add 40 yard sprint
     tryCatch({
-      # Attempt to add 40 yard sprint
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -739,6 +1365,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "40 Yard Dash", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$show()
 
       # Show success alert
       show_alert(
@@ -792,10 +1421,15 @@ server <- function(input, output, session) {
   
   ##### Submit 5-10-5 Agility Test -----
   observeEvent(input$ftfSubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$ftfSelect)
     
+    # Attempt to add 5-10-5 agility
     tryCatch({
-      # Attempt to add 5-10-5 agility
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -815,6 +1449,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "5-10-5 Pro Agility", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$hide()
 
       # Show success alert
       show_alert(
@@ -856,7 +1493,7 @@ server <- function(input, output, session) {
   })
   
   #----------------------------------------#
-  #### Pro Agility Tests -----
+  #### | Pro Agility Tests -----
   #----------------------------------------#
   
   ##### Select Pro Lane Agility Test -----
@@ -866,10 +1503,15 @@ server <- function(input, output, session) {
   
   ##### Submit Pro Lane Agility Test -----
   observeEvent(input$laneAgilSubmitBtn, {
+    
+    # Show loading screen
+    testAdd_waiter$show()
+    
+    # Get Athlete Info
     athInfo <- rosterDF() %>% filter(name == input$laneAgilSelect)
     
+    # Attempt to add pro lane agility
     tryCatch({
-      # Attempt to add pro lane agility
       df <- data.frame(
         timestamp = as.numeric(dateTime()),
         date = as.character(as.Date(Sys.time())),
@@ -888,6 +1530,9 @@ server <- function(input, output, session) {
       
       ## Update Sheet Data
       update_gsheet(sheet = "Lane Agility", data = df)
+      
+      # Close the loading screen
+      testAdd_waiter$hide()
       
       # Show success alert
       show_alert(
@@ -929,7 +1574,7 @@ server <- function(input, output, session) {
   })
   
   #------------------------------------------------------------#
-  ###----- Testing Page Output -----
+  ###> Testing Page Output -----
   #------------------------------------------------------------#
   output$testScreen <- renderUI({
     screen <- test_screen()
@@ -1449,6 +2094,18 @@ server <- function(input, output, session) {
       )
     }
   })
+  
+  #------------------------------------------------------------#
+  ##-----| Reporting Page -----
+  #------------------------------------------------------------#
+  
+  #------------------------------------------------------------#
+  ###> Reporting Logic -----
+  #------------------------------------------------------------#
+  
+  #------------------------------------------------------------#
+  ###> Reporting Page Output -----
+  #------------------------------------------------------------#
   
 }
 

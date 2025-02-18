@@ -1,0 +1,22 @@
+1. Finish Admin Features: Add/Update Athlets
+2. > Update Loading screen elements - *Added test submit Loaders -> check data sync loaders
+3. Hawkin Data update button
+4. Reporting ability
+5. Customize theme with fresh package
+
+---------------
+# Last Stop
+---------------
+# Updating 'Sync Roster'...  Affirm Sync Status
+
+
+---------------
+# Next Steps
+---------------
+
+## Priority
+1. Finish Admin Features: Add/Update Athlets
+
+## Secondary
+5. Customize fresh theme
+6. Troubleshoot Waiter logic

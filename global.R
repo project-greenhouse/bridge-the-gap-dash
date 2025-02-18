@@ -1,21 +1,24 @@
 #------------------------------------------------------------#
 # ----- Dependencies -----
 #------------------------------------------------------------#
-library("shinyWidgets")
-library("tidyverse")
-library("base64enc")
-library("jsonlite")
-library("config")
-library("shinyjs")
-library("DT")
 library("shiny")
 library("bs4Dash")
+library("shinyWidgets")
+library("shinyjs")
+library("DT")
+library("fresh")
+library("waiter")
+
+library("base64enc")
+library("gargle")
 library("googlesheets4")
 library("googledrive")
-library("hawkinR")
-library("waiter")
+library("jsonlite")
+library("config")
 library("igniteR")
-library("gargle")
+library("hawkinR")
+
+library("tidyverse")
 
 #------------------------------------------------------------#
 # ----- Env Variables -----
@@ -143,6 +146,7 @@ safe_sign_in <- function(email, password) {
 ## Get Organization Data -----
 get_btg_data <- function() {
   
+  base::assign("LastSync", get_gsheet(sheet = "Last Sync Time"))
   base::assign("rosterDF", get_gsheet(sheet = "Roster"))
   base::assign("teamsDF" , get_gsheet(sheet = "Teams"))
   base::assign("classList", get_gsheet(sheet = "classList"))
@@ -152,129 +156,138 @@ get_btg_data <- function() {
 }
 
 ## Update Force Plate Sheets -----
-updateForcePlates <- function() {
-  lastSyncTime <- get_gsheet("Last Sync Time") %>%
-    pull(lastHawkinSync)
+updateForcePlates <- function(lastSync) {
+  lastSyncTime <-lastSync %>% 
+    select(lastHawkinSync) %>%
+    pull()
   
   tryCatch({
-    # Call Newest Tests
-    newTests <- get_tests(sync = TRUE, from = lastSyncTime)
     
     #--------------------------------------------------#
     # Clean and Store CMJ
     #--------------------------------------------------#
-    if(nrow(newTests) > 0) {
-      if(any(str_detect(newTests$testType_name, "Countermovement Jump"))) {
-        cmj_clean <- newTests %>%
-          filter(str_detect(testType_name, "Countermovement Jump")) %>%
-          transmute(
-            testId = id,
-            timestamp = timestamp,
-            date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d"),
-            type = testType_name,
-            tags = testType_tags_name,
-            name = athlete_name,
-            athleteId = athlete_id,
-            teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
-            groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
-            active = athlete_active, 
-            email = athlete_email, 
-            position = athlete_position,
-            class = athlete_class,
-            sport = athlete_sport,
-            jump_height_in = jumpHeight * 39.3701,
-            l_r_peak_landing_force = lrPeakLandingForce,
-            l_r_peak_propulsive_force = lrPeakPropulsiveForce,
-            avg_prop_velocity = avgPropulsiveVelocity
-          )
-        
-        update_gsheet("CMJ", cmj_clean)
-        #updateVar(cmj_clean, "cmjData")
-      }
+    # Call Newest CMJ Tests
+    cmjTests <- get_tests(typeId = "CMJ", sync = TRUE, from = lastSyncTime)
+    
+    if(nrow(cmjTests) > 0) {
+      cmj_clean <- cmjTests %>%
+        filter(str_detect(testType_name, "Countermovement Jump")) %>%
+        transmute(
+          testId = id,
+          timestamp = timestamp,
+          date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d"),
+          type = testType_name,
+          tags = testType_tags_name,
+          name = athlete_name,
+          athleteId = athlete_id,
+          teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
+          groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
+          active = athlete_active, 
+          email = athlete_email, 
+          position = athlete_position,
+          class = athlete_class,
+          sport = athlete_sport,
+          jump_height_in = jumpHeight * 39.3701,
+          l_r_peak_landing_force = lrPeakLandingForce,
+          l_r_peak_propulsive_force = lrPeakPropulsiveForce,
+          avg_prop_velocity = avgPropulsiveVelocity
+        )
       
-      #--------------------------------------------------#
-      # Clean and Store SJ
-      #--------------------------------------------------#
-      if(any(str_detect(newTests$testType_name, "Squat Jump"))) {
-        sj_clean <- if(!any(str_detect(newTests$testType_name, "Squat Jump")))
-          newTests %>%
-          filter(str_detect(testType_name, "Squat Jump")) %>%
-          mutate(jump_height_in = jumpHeight * 39.3701,
-                 date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d")) %>%
-          rowwise() %>%
-          mutate(
-            recent_cmj = cmj_clean %>%
-              filter(athleteId == athleteId, date <= date) %>%  # Match athlete and filter by date
-              arrange(desc(date)) %>%  # Sort by the most recent date
-              slice(1) %>%
-              pull(jump_height_in),  # Get the most recent cmj jump height
-            eur = recent_cmj / jump_height_in  # Calculate the eur ratio
-          ) %>%
-          ungroup() %>%
-          transmute(
-            testId = id,
-            timestamp = timestamp,
-            date = date,
-            type = testType_name,
-            tags = testType_tags_name,
-            name = athlete_name,
-            athleteId = athlete_id,
-            teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
-            groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
-            active = athlete_active, 
-            email = athlete_email, 
-            position = athlete_position,
-            class = athlete_class,
-            sport = athlete_sport,
-            jump_height_in = jump_height_in,
-            eur = eur
-          )
-        
-        update_gsheet("Squat Jump", sj_clean)
-        #updateVar(sj_clean, "sjData")
-      }
-      
-      #--------------------------------------------------#
-      # Clean and Store MR
-      #--------------------------------------------------#
-      if(any(str_detect(newTests$testType_name, "Multi Rebound"))) {
-        multiReb_clean <- newTests %>%
-          filter(str_detect(testType_name, "Multi Rebound")) %>%
-          transmute(
-            testId = id,
-            timestamp = timestamp,
-            date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d"),
-            type = testType_name,
-            tags = testType_tags_name,
-            name = athlete_name,
-            athleteId = athlete_id,
-            teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
-            groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
-            active = athlete_active, 
-            email = athlete_email, 
-            position = athlete_position,
-            class = athlete_class,
-            sport = athlete_sport,
-            peakRSI = peakRsi,
-            top3_avgRSI = top3AvgMRsi,
-            top5_avgRSI = top5AvgMRsi
-          )
-        
-        update_gsheet("Multi Rebound", multiReb_clean)
-        #updateVar(multiReb_clean, "mrData")
-      }
-      
-      #--------------------------------------------------#
-      # Update Last Sync Time
-      #--------------------------------------------------#
-      lastSyncTime <- data.frame(
-        lastHawkinSync = c(round(as.numeric(Sys.time()), 0))
-      )
-      write_sheet(lastSyncTime, ss = gsheetId, sheet = "Last Sync Time")
-      
-      # Save Data
-      #saveVars()
+      update_gsheet("Countermovement Jump", cmj_clean)
     }
+      
+    #--------------------------------------------------#
+    # Clean and Store SJ
+    #--------------------------------------------------#
+    
+    # Call Newest SJ Tests
+    sjTests <- get_tests(typeId = "SJ", sync = TRUE, from = lastSyncTime)
+    
+    if(nrow(sjTests) > 0) {
+      if(!any(cmj_clean)) {
+        # Get the most recent CMJ data
+        cmj_clean <- get_gsheet(sheet = "Countermovement Jump") 
+      }
+
+      # Get the most recent SJ data
+      sj_clean <- sjTests %>%
+        filter(str_detect(testType_name, "Squat Jump")) %>%
+        mutate(jump_height_in = jumpHeight * 39.3701,
+               date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d")) %>%
+        rowwise() %>%
+        mutate(
+          recent_cmj = cmj_clean %>%
+            filter(athleteId == athleteId, date <= date) %>%  # Match athlete and filter by date
+            arrange(desc(date)) %>%  # Sort by the most recent date
+            slice(1) %>%
+            pull(jump_height_in),  # Get the most recent cmj jump height
+          eur = recent_cmj / jump_height_in  # Calculate the eur ratio
+        ) %>%
+        ungroup() %>%
+        transmute(
+          testId = id,
+          timestamp = timestamp,
+          date = date,
+          type = testType_name,
+          tags = testType_tags_name,
+          name = athlete_name,
+          athleteId = athlete_id,
+          teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
+          groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
+          active = athlete_active, 
+          email = athlete_email, 
+          position = athlete_position,
+          class = athlete_class,
+          sport = athlete_sport,
+          jump_height_in = jump_height_in,
+          eur = eur
+        )
+      
+      update_gsheet("Squat Jump", sj_clean)
+    }
+    
+    #--------------------------------------------------#
+    # Clean and Store MR
+    #--------------------------------------------------#
+        
+    # Call Newest MR Tests
+    mrTests <- get_tests(typeId = "MR", sync = TRUE, from = lastSyncTime)
+    
+    if(nrow(mrTests) > 0) {
+      multiReb_clean <- mrTests %>%
+        filter(str_detect(testType_name, "Multi Rebound")) %>%
+        transmute(
+          testId = id,
+          timestamp = timestamp,
+          date = format(as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"), "%Y-%m-%d"),
+          type = testType_name,
+          tags = testType_tags_name,
+          name = athlete_name,
+          athleteId = athlete_id,
+          teams = sapply(athlete_teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
+          groups = sapply(athlete_groups, function(x) if (is.null(x)) NA else paste(x, collapse = ",")), 
+          active = athlete_active, 
+          email = athlete_email, 
+          position = athlete_position,
+          class = athlete_class,
+          sport = athlete_sport,
+          peakRSI = peakRsi,
+          top3_avgRSI = top3AvgMRsi,
+          top5_avgRSI = top5AvgMRsi
+        )
+      
+      update_gsheet("Multi Rebound", multiReb_clean)
+    }
+
+      
+    #--------------------------------------------------#
+    # Update Last Sync Time
+    #--------------------------------------------------#
+    lastSyncTime <- data.frame(
+      lastHawkinSync = c(round(as.numeric(Sys.time()), 0)),
+      lastRosterSync = lastSync$lastRosterSync
+    )
+    write_sheet(lastSyncTime, ss = gsheetId, sheet = "Last Sync Time")
   }, error = function(e) {
     print(e)
   })
@@ -344,47 +357,47 @@ update_athlete <- function(df) {
   hd_athlete
 }
 
-syncRosters <- function() {
-  # 1. Get Hawkin Roster and Clean
-  hdRoster <- hawkinR::get_athletes() %>%
-    mutate(
-      teams = sapply(teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
-      groups = sapply(groups, function(x) if (is.null(x)) NA else paste(x, collapse = ","))
-    )
+syncRosters <- function(hd_roster, gsheet_roster) {
   
-  # 3. Compare Rosters
-  ## New Athletes in Hawkin Roster
-  newHawkinDiff <- hdRoster %>%
-    anti_join(get("roster"), by = c("id", "updated"))
+  # Find athletes to add to Google Sheets
+  to_add_to_gsheet <- anti_join(hd_roster, gsheet_roster, by = "id")
   
-  ## Updates Atheltes in Saved Roster
-  newRosterDiff <- get("roster") %>%
-    anti_join(hdRoster, by = c("id", "updated"))
+  # Find athletes to update in Google Sheets
+  to_update_in_gsheet <- inner_join(hd_roster, gsheet_roster, by = "id") %>%
+    filter(updated.x > updated.y)
   
-  # 4. If Updated in Roster Var -> Update Hawkin Roster
-  if (nrow(newRosterDiff) > 0) {
-    
-    # Add New Athletes to Hawkin Roster
-    update_athlete(newRosterDiff)
-    
-    # Reload HD Roster after Update
-    hdRoster <- hawkinR::get_athletes() %>%
-      mutate(
-        teams = sapply(teams, function(x) if (is.null(x)) NA else paste(x, collapse = ",")),
-        groups = sapply(groups, function(x) if (is.null(x)) NA else paste(x, collapse = ","))
-      )
-    
-    # Check Again for Hawkin Roster Differences
-    newHawkinDiff <- hdRoster %>%
-      anti_join(newRosterDiff, by = c("id", "updated"))
+  # Find athletes to add to Hawkin API
+  to_add_to_hawkin <- anti_join(gsheet_roster, hd_roster, by = "id")
+  
+  # Find athletes to update in Hawkin API
+  to_update_in_hawkin <- inner_join(gsheet_roster, hd_roster, by = "id") %>%
+    filter(updated.y > updated.x)
+  
+  # 3. Update Data -----
+  
+  # Add athletes to Google Sheets
+  if (nrow(to_add_to_gsheet) > 0) {
+    lapply(seq_len(nrow(to_add_to_gsheet)), function(i) {
+      update_gsheet(sheet = "Roster", data = to_add_to_gsheet[i, ])
+    })
   }
   
-  # 5. If Updated/New in Hawkin -> Update Google Roster
-  if (nrow(newHawkinDiff) > 0) {
-    updateVar(newHawkinDiff, "roster")
+  # Update athletes in Google Sheets
+  if (nrow(to_update_in_gsheet) > 0) {
+    lapply(seq_len(nrow(to_update_in_gsheet)), function(i) {
+      update_gsheet(sheet = "Roster", data = to_update_in_gsheet[i, ])
+    })
   }
   
-  saveVars()
+  # Add athletes to Hawkin API
+  if (nrow(to_add_to_hawkin) > 0) {
+    add_athlete(to_add_to_hawkin)
+  }
+  
+  # Update athletes in Hawkin API
+  if (nrow(to_update_in_hawkin) > 0) {
+    update_athlete(to_update_in_hawkin)
+  }
 }
 
 replace_names_with_ids <- function(teamValues, label_df) {

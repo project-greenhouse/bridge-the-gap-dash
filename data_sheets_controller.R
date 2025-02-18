@@ -1,13 +1,34 @@
 as.integer() # 12, 31, 331
 as.numeric() # 12.5, 31.5, 331.5
-as.character() " words"
-as.Date(Sys.time()) "YYYY-MM-DD"
+as.character() # "words"
+as.Date(Sys.time()) # "YYYY-MM-DD"
 
-rosterDF()
-teamsDF()
-classList()
-posList()
-sportList()
+# rosterDF()
+# teamsDF()
+# classList()
+# posList()
+# sportList()
+
+# Last Sync
+df <- data.frame(
+  lastHawkinSync = as.numeric(),
+  lastRosterSync = as.numeric()
+)
+
+# Roster
+
+df <- data.frame(
+  id = as.character(),
+  name = as.character(),
+  teams = as.character(),
+  groups = as.character(),
+  active = as.character(),
+  email = as.character(),
+  position = as.character(),
+  class = as.character(),
+  sport = as.character(),
+  updated = as.numeric()
+)
 
 # Anthropometrics
 df <- data.frame(
@@ -32,8 +53,11 @@ googlesheets4::write_sheet(df, ss = gsheetId, sheet = "Anthropometrics")
 
 # Countermovement Jump
 df <- data.frame(
+  testId = as.character(),
   timestamp = as.numeric(),
-  date = as.Date(),
+  date = as.character(),
+  type = as.character(),
+  tags = as.character(),
   name = as.character(),
   athleteId = as.character(),
   teams = as.character(),
@@ -43,18 +67,21 @@ df <- data.frame(
   position = as.character(),
   class = as.character(),
   sport = as.character(),
-  height_ft = as.integer(),
-  height_in = as.numeric(),
-  wingspan = as.integer(),
-  reach = as.integer()
+  jump_height_in = as.numeric(),
+  l_r_peak_landing_force = as.numeric(),
+  l_r_peak_propulsive_force = as.numeric(),
+  avg_prop_velocity = as.numeric()
 )
 
 googlesheets4::write_sheet(df, ss = gsheetId, sheet = "Countermovement Jump")
 
 # Squat Jump
 df <- data.frame(
+  testId = as.character(),
   timestamp = as.numeric(),
-  date = as.Date(),
+  date = as.character(),
+  type = as.character(),
+  tags = as.character(),
   name = as.character(),
   athleteId = as.character(),
   teams = as.character(),
@@ -64,18 +91,19 @@ df <- data.frame(
   position = as.character(),
   class = as.character(),
   sport = as.character(),
-  height_ft = as.integer(),
-  height_in = as.numeric(),
-  wingspan = as.integer(),
-  reach = as.integer()
+  jump_height_in = as.numeric(),
+  eur = as.numeric()
 )
 
 googlesheets4::write_sheet(df, ss = gsheetId, sheet = "Squat Jump")
 
 # Multi-Rebound Jump
 df <- data.frame(
+  testId = as.character(),
   timestamp = as.numeric(),
-  date = as.Date(),
+  date = as.character(),
+  type = as.character(),
+  tags = as.character(),
   name = as.character(),
   athleteId = as.character(),
   teams = as.character(),
@@ -85,13 +113,12 @@ df <- data.frame(
   position = as.character(),
   class = as.character(),
   sport = as.character(),
-  height_ft = as.integer(),
-  height_in = as.numeric(),
-  wingspan = as.integer(),
-  reach = as.integer()
+  peakRSI = as.numeric(),
+  top3_avgRSI = as.numeric(),
+  top5_avgRSI = as.numeric()
 )
 
-googlesheets4::write_sheet(df, ss = gsheetId, sheet = "Multi-Rebound ")
+googlesheets4::write_sheet(df, ss = gsheetId, sheet = "Multi-Rebound")
 
 #------------------------------------------------------------------#
 #------------------------------------------------------------------#

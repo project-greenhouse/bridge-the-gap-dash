@@ -805,9 +805,13 @@ output$adminScreen <- renderUI({
   )
 })
 
+
 #------------------------------------------------------------#
-#----- Filter Test Dates -----
+#----- REPORTING -----
 #------------------------------------------------------------#
+
+##----- Filter Test Dates -----
+
 filter_dates <- function(athleteName) {
   ath <- athleteName
   
